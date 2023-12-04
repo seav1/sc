@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-NEZHA_SERVER=${NEZHA_SERVER:-''}
-NEZHA_PORT=${NEZHA_PORT:-''}
-NEZHA_KEY=${NEZHA_KEY:-''}
+NZ_SERVER=${NZ_SERVER:-''}
+NZ_PORT=${NZ_PORT:-'443'}
+NZ_KEY=${NZ_KEY:-''}
 TLS=${TLS:-'1'}
-ARGO_DOMAIN=${ARGO_DOMAIN:-''}
-ARGO_AUTH=${ARGO_AUTH:-''}
-WSPATH=${WSPATH:-'argo'}
-UUID=${UUID:-'de04add9-5c68-8bab-950c-08cd5320df18'}
+AGO_DOMAIN=${AGO_DOMAIN:-''}
+AGO_AUTH=${AGO_AUTH:-''}
+WSPATH=${WSPATH:-'ago'}
+UUID=${UUID:-'7090ff5d-f321-4248-a7c3-d8837f124999'}
 CFIP=${CFIP:-'icook.hk'}
-NAME=${NAME:-''}
 
 if [ "$TLS" -eq 0 ]; then
-  NEZHA_TLS=''
+  NZ_TLS=''
 elif [ "$TLS" -eq 1 ]; then
-  NEZHA_TLS='--tls'
+  NZ_TLS='--tls'
 fi
 
 
@@ -62,31 +61,31 @@ download_program "cc" "https://github.com/cloudflare/cloudflared/releases/downlo
 sleep 6
 
 cleanup_files() {
-  rm -rf argo.log list.txt sub.txt encode.txt
+  rm -rf ago.log list.txt sub.txt encode.txt
 }
 
-argo_type() {
-  if [[ -z $ARGO_AUTH || -z $ARGO_DOMAIN ]]; then
-    echo "ARGO_AUTH or ARGO_DOMAIN is empty, use Quick Tunnels"
+ago_type() {
+  if [[ -z $AGO_AUTH || -z $AGO_DOMAIN ]]; then
+    echo "AGO_AUTH or AGO_DOMAIN is empty, use Quick Tunnels"
     return
   fi
 
-  if [[ $ARGO_AUTH =~ TunnelSecret ]]; then
-    echo $ARGO_AUTH > tunnel.json
+  if [[ $AGO_AUTH =~ TunnelSecret ]]; then
+    echo $AGO_AUTH > tunnel.json
     cat > tunnel.yml << EOF
-tunnel: $(cut -d\" -f12 <<< $ARGO_AUTH)
+tunnel: $(cut -d\" -f12 <<< $AGO_AUTH)
 credentials-file: ./tunnel.json
 protocol: http2
 
 ingress:
-  - hostname: $ARGO_DOMAIN
+  - hostname: $AGO_DOMAIN
     service: http://localhost:8080
     originRequest:
       noTLSVerify: true
   - service: http_status:404
 EOF
   else
-    echo "ARGO_AUTH Mismatch TunnelSecret"
+    echo "AGO_AUTH Mismatch TunnelSecret"
   fi
 }
 
@@ -94,9 +93,9 @@ EOF
 run() {
   if [ -e nm ]; then
   chmod 775 nm
-    if [ -n "$NEZHA_SERVER" ] && [ -n "$NEZHA_PORT" ] && [ -n "$NEZHA_KEY" ]; then
-    nohup ./nm -s ${NEZHA_SERVER}:${NEZHA_PORT} -p ${NEZHA_KEY} ${NEZHA_TLS} >/dev/null 2>&1 &
-    keep1="nohup ./nm -s ${NEZHA_SERVER}:${NEZHA_PORT} -p ${NEZHA_KEY} ${NEZHA_TLS} >/dev/null 2>&1 &"
+    if [ -n "$NZ_SERVER" ] && [ -n "$NZ_PORT" ] && [ -n "$NZ_KEY" ]; then
+    nohup ./nm -s ${NZ_SERVER}:${NZ_PORT} -p ${NZ_KEY} ${NZ_TLS} >/dev/null 2>&1 &
+    keep1="nohup ./nm -s ${NZ_SERVER}:${NZ_PORT} -p ${NZ_KEY} ${NZ_TLS} >/dev/null 2>&1 &"
     fi
   fi
 
@@ -108,12 +107,12 @@ run() {
 
   if [ -e cc ]; then
   chmod 775 cc
-if [[ $ARGO_AUTH =~ ^[A-Z0-9a-z=]{120,250}$ ]]; then
-  args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile argo.log --loglevel info run --token ${ARGO_AUTH}"
-elif [[ $ARGO_AUTH =~ TunnelSecret ]]; then
+if [[ $AGO_AUTH =~ ^[A-Z0-9a-z=]{120,250}$ ]]; then
+  args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ago.log --loglevel info run --token ${AGO_AUTH}"
+elif [[ $AGO_AUTH =~ TunnelSecret ]]; then
   args="tunnel --edge-ip-version auto --config tunnel.yml run"
 else
-  args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile argo.log --loglevel info --url http://localhost:8080"
+  args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ago.log --loglevel info --url http://localhost:8080"
 fi
 nohup ./cc $args >/dev/null 2>&1 &
 keep3="nohup ./cc $args >/dev/null 2>&1 &"
@@ -353,33 +352,27 @@ cleanup_files
 sleep 2
 generate_config
 sleep 3
-argo_type
+ago_type
 sleep 3
 run
 sleep 15
 
-function get_argo_domain() {
-  if [[ -n $ARGO_AUTH ]]; then
-    echo "$ARGO_DOMAIN"
+function get_ago_domain() {
+  if [[ -n $AGO_AUTH ]]; then
+    echo "$AGO_DOMAIN"
   else
-    cat argo.log | grep trycloudflare.com | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}'
+    cat ago.log | grep trycloudflare.com | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}'
   fi
 }
 
-ip=$(curl -s https://speed.cloudflare.com/meta | awk -F\" '{print $26"-"$18}' | sed -e 's/ /_/g')
+isp=$(curl -s https://speed.cloudflare.com/meta | awk -F\" '{print $26"-"$18"-"$30}' | sed -e 's/ /_/g')
 sleep 3
- 
-if [ -n "$NAME" ]; then 
-  isp="$NAME"  
-else
-  isp="$ip" 
-fi
 
 generate_links() {
-  argo=$(get_argo_domain)
+  ago=$(get_ago_domain)
   sleep 1
 
-  VMESS="{ \"v\": \"2\", \"ps\": \"${isp}-vm\", \"add\": \"${CFIP}\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${argo}\", \"path\": \"/${WSPATH}-vmess?ed=2048\", \"tls\": \"tls\", \"sni\": \"${argo}\", \"alpn\": \"\" }"
+  VMESS="{ \"v\": \"2\", \"ps\": \"${isp}-vm\", \"add\": \"${CFIP}\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${ago}\", \"path\": \"/${WSPATH}-vmess?ed=2048\", \"tls\": \"tls\", \"sni\": \"${ago}\", \"alpn\": \"\" }"
 
   cat > list.txt <<EOF
 *******************************************
@@ -387,41 +380,41 @@ ${CFIP} 可替换为CF优选IP,端口 443 可改为 2053 2083 2087 2096 8443
 ----------------------------
 V2-rayN:
 ----------------------------
-vless://${UUID}@${CFIP}:443?encryption=none&security=tls&sni=${argo}&type=ws&host=${argo}&path=%2F${WSPATH}-vless?ed=2048#${isp}-Vl
+vless://${UUID}@${CFIP}:443?encryption=none&security=tls&sni=${ago}&type=ws&host=${ago}&path=%2F${WSPATH}-vless?ed=2048#${isp}-Vl
 ----------------------------
 vmess://$(echo "$VMESS" | base64 -w0)
 ----------------------------
-trojan://${UUID}@${CFIP}:443?security=tls&sni=${argo}&type=ws&host=${argo}&path=%2F${WSPATH}-trojan?ed=2048#${isp}-Tr
+trojan://${UUID}@${CFIP}:443?security=tls&sni=${ago}&type=ws&host=${ago}&path=%2F${WSPATH}-trojan?ed=2048#${isp}-Tr
 ----------------------------
 ss://$(echo "chacha20-ietf-poly1305:${UUID}@${CFIP}:443" | base64 -w0)@${CFIP}:443#${isp}-SS
-由于该软件导出的链接不全，请自行处理如下: 传输协议: WS ， 伪装域名: ${argo} ，路径: /${WSPATH}-shadowsocks?ed=2048 ， 传输层安全: tls ， sni: ${argo}
+由于该软件导出的链接不全，请自行处理如下: 传输协议: WS ， 伪装域名: ${ago} ，路径: /${WSPATH}-shadowsocks?ed=2048 ， 传输层安全: tls ， sni: ${ago}
 *******************************************
 Shadowrocket:
 ----------------------------
-vless://${UUID}@${CFIP}:443?encryption=none&security=tls&type=ws&host=${argo}&path=/${WSPATH}-vless?ed=2048&sni=${argo}#${isp}-Vl
+vless://${UUID}@${CFIP}:443?encryption=none&security=tls&type=ws&host=${ago}&path=/${WSPATH}-vless?ed=2048&sni=${ago}#${isp}-Vl
 ----------------------------
-vmess://$(echo "none:${UUID}@${CFIP}:443" | base64 -w0)?remarks=${isp}-Vm&obfsParam=${argo}&path=/${WSPATH}-vmess?ed=2048&obfs=websocket&tls=1&peer=${argo}&alterId=0
+vmess://$(echo "none:${UUID}@${CFIP}:443" | base64 -w0)?remarks=${isp}-Vm&obfsParam=${ago}&path=/${WSPATH}-vmess?ed=2048&obfs=websocket&tls=1&peer=${ago}&alterId=0
 ----------------------------
-trojan://${UUID}@${CFIP}:443?peer=${argo}&plugin=obfs-local;obfs=websocket;obfs-host=${argo};obfs-uri=/${WSPATH}-trojan?ed=2048#${isp}-Tr
+trojan://${UUID}@${CFIP}:443?peer=${ago}&plugin=obfs-local;obfs=websocket;obfs-host=${ago};obfs-uri=/${WSPATH}-trojan?ed=2048#${isp}-Tr
 ----------------------------
-ss://$(echo "chacha20-ietf-poly1305:${UUID}@${CFIP}:443" | base64 -w0)?obfs=wss&obfsParam=${argo}&path=/${WSPATH}-shadowsocks?ed=2048#${isp}-Ss
+ss://$(echo "chacha20-ietf-poly1305:${UUID}@${CFIP}:443" | base64 -w0)?obfs=wss&obfsParam=${ago}&path=/${WSPATH}-shadowsocks?ed=2048#${isp}-Ss
 *******************************************
 Clash:
 ----------------------------
-- {name: ${isp}-Vless, type: vless, server: ${CFIP}, port: 443, uuid: ${UUID}, tls: true, servername: ${argo}, skip-cert-verify: false, network: ws, ws-opts: {path: /${WSPATH}-vless?ed=2048, headers: { Host: ${argo}}}, udp: true}
+- {name: ${isp}-Vless, type: vless, server: ${CFIP}, port: 443, uuid: ${UUID}, tls: true, servername: ${ago}, skip-cert-verify: false, network: ws, ws-opts: {path: /${WSPATH}-vless?ed=2048, headers: { Host: ${ago}}}, udp: true}
 ----------------------------
-- {name: ${isp}-Vmess, type: vmess, server: ${CFIP}, port: 443, uuid: ${UUID}, alterId: 0, cipher: none, tls: true, skip-cert-verify: true, network: ws, ws-opts: {path: /${WSPATH}-vmess?ed=2048, headers: {Host: ${argo}}}, udp: true}
+- {name: ${isp}-Vmess, type: vmess, server: ${CFIP}, port: 443, uuid: ${UUID}, alterId: 0, cipher: none, tls: true, skip-cert-verify: true, network: ws, ws-opts: {path: /${WSPATH}-vmess?ed=2048, headers: {Host: ${ago}}}, udp: true}
 ----------------------------
-- {name: ${isp}-Trojan, type: trojan, server: ${CFIP}, port: 443, password: ${UUID}, udp: true, tls: true, sni: ${argo}, skip-cert-verify: false, network: ws, ws-opts: { path: /${WSPATH}-trojan?ed=2048, headers: { Host: ${argo} } } }
+- {name: ${isp}-Trojan, type: trojan, server: ${CFIP}, port: 443, password: ${UUID}, udp: true, tls: true, sni: ${ago}, skip-cert-verify: false, network: ws, ws-opts: { path: /${WSPATH}-trojan?ed=2048, headers: { Host: ${ago} } } }
 ----------------------------
-- {name: ${isp}-Shadowsocks, type: ss, server: ${CFIP}, port: 443, cipher: chacha20-ietf-poly1305, password: ${UUID}, plugin: v2ray-plugin, plugin-opts: { mode: websocket, host: ${argo}, path: /${WSPATH}-shadowsocks?ed=2048, tls: true, skip-cert-verify: false, mux: false } }
+- {name: ${isp}-Shadowsocks, type: ss, server: ${CFIP}, port: 443, cipher: chacha20-ietf-poly1305, password: ${UUID}, plugin: v2ray-plugin, plugin-opts: { mode: websocket, host: ${ago}, path: /${WSPATH}-shadowsocks?ed=2048, tls: true, skip-cert-verify: false, mux: false } }
 *******************************************
 EOF
 
   cat > encode.txt <<EOF
-vless://${UUID}@${CFIP}:443?encryption=none&security=tls&sni=${argo}&type=ws&host=${argo}&path=%2F${WSPATH}-vless?ed=2048#${isp}-Vl
+vless://${UUID}@${CFIP}:443?encryption=none&security=tls&sni=${ago}&type=ws&host=${ago}&path=%2F${WSPATH}-vless?ed=2048#${isp}-Vl
 vmess://$(echo "$VMESS" | base64 -w0)
-trojan://${UUID}@${CFIP}:443?security=tls&sni=${argo}&type=ws&host=${argo}&path=%2F${WSPATH}-trojan?ed=2048#${isp}-Tr
+trojan://${UUID}@${CFIP}:443?security=tls&sni=${ago}&type=ws&host=${ago}&path=%2F${WSPATH}-trojan?ed=2048#${isp}-Tr
 EOF
 
 base64 -w0 encode.txt > sub.txt 
@@ -429,22 +422,7 @@ base64 -w0 encode.txt > sub.txt
   cat list.txt
   echo -e "\n节点信息已保存在 list.txt"
 }
-
-clear
-generate_links  
-cat << EOF
-Powered by
- _         _     _ 
-/ \__/|   / |   / |
-| |\/||   | |   | |
-| |  ||/\_| |/\_| |
-\_/  \|\____/\____/
-                                               
-mjjonone的Github项目  ：https://github.com/mjjonone
-______________________________________
-EOF
-                                                                                                                                               
-
+                                                                                                                                     
 if [ -n "$STARTUP" ]; then
   if [[ "$STARTUP" == *"java"* ]]; then
     java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar server1.jar
