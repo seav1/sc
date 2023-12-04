@@ -1,9 +1,9 @@
 {
-  "name": "mjj",
+  "name": "jfu",
   "version": "1.1.1",
   "main": "index.js",
-  "repository": "https://github.com/mjjonone/mjj",
-  "author": "mjjonone",
+  "repository": "https://github.com/seav1/sc",
+  "author": "jfu",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
